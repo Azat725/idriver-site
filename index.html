@@ -141,6 +141,15 @@
     .field label, .field-error, .form-note { font-size: 12px; }
     .field input, .field select { min-width: 0; font-size: 16px; }
     .field input::placeholder { color: #667367; }
+    .phone-field { position: relative; }
+    .phone-prefix {
+      position: absolute;
+      inset-inline-start: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      pointer-events: none;
+    }
+    .field .phone-field input { padding-inline-start: 40px; }
     .field-error:empty, .form-status:empty { display: none; }
     @media (max-width: 1320px) {
       .to-top {
@@ -445,7 +454,15 @@
           <noscript><p class="booking-form">Для записи позвоните в учебный класс: <a href="tel:+79625523322">+7 (962) 552-33-22</a>.</p></noscript>
           <form class="booking-form" id="booking-form" novalidate hidden>
             <div class="field"><label for="name">Ваше имя</label><input id="name" name="name" type="text" maxlength="100" aria-describedby="name-error" autocomplete="name" placeholder="Как к вам обращаться?" required><span class="field-error" id="name-error"></span></div>
-            <div class="field"><label for="phone">Телефон для связи</label><input id="phone" name="phone" type="tel" maxlength="30" aria-describedby="phone-error" autocomplete="tel" inputmode="tel" placeholder="+7 (___) ___-__-__" required><span class="field-error" id="phone-error"></span></div>
+            <div class="field">
+              <label for="phone">Телефон для связи</label>
+              <div class="phone-field">
+                <span class="phone-prefix" aria-hidden="true">+7</span>
+                <input id="phone" name="phone" type="tel" maxlength="30" aria-describedby="phone-hint phone-error" autocomplete="tel-national" inputmode="numeric" placeholder="(999) 123-45-67" required>
+              </div>
+              <span class="visually-hidden" id="phone-hint">Введите 10 цифр после +7.</span>
+              <span class="field-error" id="phone-error"></span>
+            </div>
             <div class="field"><label for="package">Программа обучения</label><select id="package" name="package"><option>Всё включено — 79 900 ₽</option><option>Теория — 30 000 ₽</option><option>Практика — 55 000 ₽</option><option>Одно практическое занятие</option><option>Нужна консультация</option><option>Консультация по обучению на АКПП</option></select></div>
             <div class="field">
               <label for="branch">Учебный класс</label>
@@ -693,22 +710,76 @@
       input.setAttribute('aria-invalid', String(Boolean(message)));
       document.getElementById(`${input.id}-error`).textContent = message;
     }
-    [nameInput, phoneInput].forEach(input => input.addEventListener('input', () => setError(input, '')));
+    nameInput.addEventListener('input', () => setError(nameInput, ''));
+
+    function readPhone(value) {
+      const text = value.trim();
+      if (!/^\+?[\d\s().-]*$/.test(text)) return null;
+      const digits = text.replace(/\D/g, '');
+      if (/^[78]\d{10}$/.test(digits) && (!text.startsWith('+') || digits.startsWith('7'))) return digits.slice(1);
+      return digits.length <= 10 && !text.startsWith('+') ? digits : null;
+    }
+
+    const phoneError = 'Введите 10 цифр номера после +7.';
+    function formatPhone() {
+      const value = phoneInput.value;
+      const digits = readPhone(value);
+      setError(phoneInput, digits === null ? phoneError : '');
+      if (digits === null) return;
+
+      let formatted = digits ? '(' + digits.slice(0, 3) : '';
+      if (digits.length > 3) formatted += ') ' + digits.slice(3, 6);
+      if (digits.length > 6) formatted += '-' + digits.slice(6, 8);
+      if (digits.length > 8) formatted += '-' + digits.slice(8, 10);
+      if (value === formatted) return;
+
+      const prefixLength = value.replace(/\D/g, '').length - digits.length;
+      let digitsBeforeCaret = value.slice(0, phoneInput.selectionStart).replace(/\D/g, '').length - prefixLength;
+      let caret = 0;
+      while (digitsBeforeCaret > 0) {
+        if (/\d/.test(formatted[caret])) digitsBeforeCaret--;
+        caret++;
+      }
+      phoneInput.value = formatted;
+      phoneInput.setSelectionRange(caret, caret);
+    }
+
+    phoneInput.addEventListener('input', formatPhone);
+    phoneInput.addEventListener('beforeinput', event => {
+      if (!event.cancelable) return;
+      const { value, selectionStart: start, selectionEnd: end } = phoneInput;
+      if (event.inputType === 'insertText' && event.data?.length === 1) {
+        const retained = value.slice(0, start) + value.slice(end);
+        if (!/^\d$/.test(event.data) || retained.replace(/\D/g, '').length >= 10) event.preventDefault();
+        return;
+      }
+      const backward = event.inputType === 'deleteContentBackward';
+      if (start !== end || (!backward && event.inputType !== 'deleteContentForward')) return;
+      const adjacent = value[backward ? start - 1 : start];
+      if (!adjacent || /\d/.test(adjacent)) return;
+
+      const digitOffset = backward ? value.slice(0, start).search(/\d\D*$/) : value.slice(start).search(/\d/);
+      if (digitOffset < 0) return;
+      event.preventDefault();
+      phoneInput.setRangeText('', backward ? digitOffset : start, backward ? start : start + digitOffset + 1, 'start');
+      formatPhone();
+    });
+
     form.addEventListener('submit', event => {
       event.preventDefault();
       const name = nameInput.value.trim();
-      const digits = phoneInput.value.replace(/\D/g, '');
+      const digits = readPhone(phoneInput.value);
       const validName = name.length >= 2;
-      const validPhone = /^[+0-9 ().-]+$/.test(phoneInput.value.trim()) && /^(?:[78])?\d{10}$/.test(digits);
+      const validPhone = digits?.length === 10;
       setError(nameInput, validName ? '' : 'Укажите имя — не менее двух символов.');
-      setError(phoneInput, validPhone ? '' : 'Введите номер в формате +7 (999) 123-45-67.');
+      setError(phoneInput, validPhone ? '' : phoneError);
       if (!validName || !validPhone) {
         (validName ? phoneInput : nameInput).focus();
         return;
       }
       const course = document.getElementById('package').value;
       const branch = branchInput.selectedOptions[0];
-      const message = `Здравствуйте! Хочу записаться в автошколу iDriver.\n\nИмя: ${name}\nТелефон: +7${digits.slice(-10)}\nПрограмма: ${course}\nУчебный класс: ${branch.textContent}`;
+      const message = `Здравствуйте! Хочу записаться в автошколу iDriver.\n\nИмя: ${name}\nТелефон: +7${digits}\nПрограмма: ${course}\nУчебный класс: ${branch.textContent}`;
       const url = `https://wa.me/${branch.value}?text=${encodeURIComponent(message)}`;
       document.getElementById('form-status').textContent = 'Открываем WhatsApp с готовым сообщением…';
       window.location.assign(url);
