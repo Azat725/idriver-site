@@ -294,6 +294,25 @@
         transform: none;
       }
     }
+    [data-theme="light"] .contacts { padding-bottom: clamp(40px, 5vw, 72px); }
+    [data-theme="light"] .footer {
+      margin-top: 0;
+      border-top: 1px solid var(--line);
+      background: var(--price-band);
+      color: var(--fg);
+    }
+    [data-theme="light"] .footer :is(.logo-copy small, .footer-about, h3, .footer-bottom) {
+      color: var(--muted);
+    }
+    [data-theme="light"] .footer :is(.footer-links a, .footer-contact) { color: var(--text); }
+    [data-theme="light"] .footer-contact a { color: var(--fg); }
+    [data-theme="light"] .footer a:not(.logo):hover { color: var(--accent); }
+    [data-theme="light"] .footer-bottom { border-color: var(--line); }
+    [data-theme="light"] .to-top {
+      background: var(--surface);
+      border-color: var(--line);
+      color: var(--accent);
+    }
     .contact-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 14px; margin-top: 6px; }
     .contact-actions .text-link, .copy-address { min-height: 44px; }
     .copy-address {
